@@ -5,7 +5,7 @@ const db = connectDB();
 
 const updateData = async (req, res) => {
     const { ia1, ia2, ia3, subj, usn } = req.body;
-    // const { usn } = req.params; // Assuming usn is part of URL parameters
+   
 
     try {
         // Construct SQL query to update data
