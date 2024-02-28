@@ -3,35 +3,49 @@ const { connectDB } = require('../Connect/Connect');
 // Connect to the database
 const db = connectDB();
 
-const viewData = async () => {
+const viewData = async (req, res) => {
+    const subj = req.query.subj; 
+    console.log("Showing the values for -> ", subj);
     try {
+        // SQL statements to drop existing views
+        const dropViewsQueries = [
+            `DROP VIEW IF EXISTS ${subj}_marks;`,
+            `DROP VIEW IF EXISTS days_present;`,
+            `DROP VIEW IF EXISTS ultimate_table;`
+        ];
+
+        // Execute update queries to drop existing views
+        for (const query of dropViewsQueries) {
+            await executeQuery(query);
+        }
+
         // SQL statement to update avg_marks
         const updateAvgMarksQuery = `
-            UPDATE dbms_marks 
+            UPDATE ${subj}_marks 
             SET avg_marks = (ia1 + ia2 + ia3) / 3
             WHERE ia1 IS NOT NULL AND ia2 IS NOT NULL AND ia3 IS NOT NULL;
         `;
 
-        // SQL statements to create views and select data
+        // SQL statements to create views
         const createDaysPresentView = `
-            CREATE VIEW IF NOT EXISTS days_present AS
+            CREATE VIEW days_present AS
             SELECT name, COUNT(*) AS present
-            FROM (SELECT DISTINCT name, date FROM dbms_attendance) AS distinct_name
+            FROM (SELECT DISTINCT name, date FROM ${subj}_attendance) AS distinct_name
             GROUP BY name;
         `;
 
         const createUltimateTableView = `
-            CREATE VIEW IF NOT EXISTS ultimate_table AS
+            CREATE VIEW ultimate_table AS
             SELECT DISTINCT d.usn, d.name, p.present,
-            (SELECT COUNT(DISTINCT date) FROM dbms_attendance) AS total_no_of_days,
+            (SELECT COUNT(DISTINCT date) FROM ${subj}_attendance) AS total_no_of_days,
             IFNULL(m.ia1, 0) AS ia1,
             IFNULL(m.ia2, 0) AS ia2,
             IFNULL(m.ia3, 0) AS ia3,
             m.avg_marks
             FROM details d
-            LEFT JOIN dbms_attendance a ON d.name = a.name
+            LEFT JOIN ${subj}_attendance a ON d.name = a.name
             LEFT JOIN days_present p ON d.name = p.name
-            LEFT JOIN dbms_marks m ON d.usn = m.usn;
+            LEFT JOIN ${subj}_marks m ON d.usn = m.usn;
         `;
 
         const selectFromUltimateTable = `
@@ -39,24 +53,33 @@ const viewData = async () => {
         `;
 
         // Execute update query to calculate avg_marks
-        await executeQuery(updateAvgMarksQuery, 'Updating avg_marks');
+        await executeQuery(updateAvgMarksQuery);
 
         // Execute SQL statements to create views
-        await executeQuery(createDaysPresentView, 'Creating days_present view');
-        await executeQuery(createUltimateTableView, 'Creating ultimate_table view');
+        await executeQuery(createDaysPresentView);
+        await executeQuery(createUltimateTableView);
 
         // After creating the views, execute the SELECT statement
-        const selectResults = await executeQuery(selectFromUltimateTable, 'Selecting from ultimate_table');
+        const data = await executeQuery(selectFromUltimateTable);
 
-        // Return the selected results
-        console.table(selectResults);
-        
+        // Extracting data and formatting it into an array
+        const dataArray = data.map(item => ({
+            usn: item.usn,
+            name: item.name,
+            present: item.present,
+            total_no_of_days: item.total_no_of_days,
+            ia1: item.ia1,
+            ia2: item.ia2,
+            ia3: item.ia3,
+            avg_marks: item.avg_marks
+        }));
+
+        console.table(dataArray);
+        return res.status(200).json(dataArray);
+
     } catch (error) {
         console.error('Error:', error);
-        throw error;
-    } finally {
-        // Close the database connection
-        // db.end();
+        return res.status(500).json({ error: 'Internal Server Error' });
     }
 };
 
@@ -67,7 +90,7 @@ async function executeQuery(query, message) {
                 console.error(`Error ${message}:`, err);
                 reject(err);
             } else {
-                console.log(`${message} successfully`);
+                 
                 resolve(results);
             }
         });
