@@ -1,6 +1,6 @@
 const { connectDB } = require('../Connect/Connect');
 
-// // Connect to the database
+//  Connect to the database
 const db = connectDB();
 
 const updateData = async (req, res) => {
